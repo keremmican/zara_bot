@@ -1,6 +1,5 @@
 package com.mican.zara.service;
 
-import com.mican.zara.model.Product;
 import com.mican.zara.model.Size;
 import com.mican.zara.model.Subscription;
 import com.mican.zara.model.enums.Availability;
@@ -11,9 +10,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.time.ZonedDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -80,17 +82,30 @@ public class SubscriptionService {
                 // Eğer availability değişti ve yeni durum IN_STOCK ise bildirim gönder
                 if (!currentAvailability.equals(subscription.getLastAvailability()) &&
                         matchingSize.getAvailability() == Availability.IN_STOCK) {
-                    log.info("Telegram gönderiliyo");
+                    log.info("Telegram gönderiliyor");
                     sendTelegramNotification(subscription, matchingSize); // Telegram bildirim fonksiyonu
+
+                    // Abonelik veritabanından silinir
+                    log.info("Abonelik siliniyor: {}", subscription);
+                    subscriptionRepository.delete(subscription);
+                    continue; // Abonelik silindiği için döngünün bir sonraki iterasyonuna geç
                 }
 
-                // Aboneliği güncelle
+                // Abonelik durumunu güncelle
                 subscription.setLastAvailability(currentAvailability);
+            }
+
+            // Abonelik tarihi kontrolü: 21 günden eskiyse sil
+            if (subscription.getSubscriptionDate().isBefore(ZonedDateTime.now().minusDays(21))) {
+                log.info("Abonelik süresi dolduğu için siliniyor: {}", subscription);
+                subscriptionRepository.delete(subscription);
+            } else {
+                // Güncellenme tarihini kaydet
+                subscription.setLastUpdate(ZonedDateTime.now());
                 subscriptionRepository.save(subscription);
             }
         }
     }
-
 
     private void sendTelegramNotification(Subscription subscription, Size size) {
         try {
@@ -119,6 +134,41 @@ public class SubscriptionService {
         } catch (Exception e) {
             log.error("Telegram bildirimi gönderilirken hata oluştu: {}", e.getMessage());
         }
+    }
+
+    public void sendWeeklySubscriptionSummary() {
+        List<Subscription> subscriptions = getAllSubscriptions();
+
+        // Kullanıcıların aboneliklerini gruplandır
+        Map<String, List<Subscription>> subscriptionsByChatId = subscriptions.stream()
+                .collect(Collectors.groupingBy(Subscription::getChatId));
+
+        // Her bir kullanıcı için mesaj oluştur ve gönder
+        subscriptionsByChatId.forEach((chatId, userSubscriptions) -> {
+            StringBuilder messageBuilder = new StringBuilder();
+            messageBuilder.append("📜 Güncel Abonelik Listesi:\n\n");
+
+            for (Subscription subscription : userSubscriptions) {
+                messageBuilder.append("🛒 Ürün Kodu: ").append(subscription.getProductCode()).append("\n")
+                        .append("📦 Ürün İsmi: ").append(productService.getProductName(subscription.getProductCode(), subscription.getColor())).append("\n")
+                        .append("🎨 Renk: ").append(subscription.getColor()).append("\n")
+                        .append("📏 Beden: ").append(subscription.getSize()).append("\n")
+                        .append("⏰ Abonelik Tarihi: ").append(subscription.getSubscriptionDate()).append("\n\n");
+            }
+
+            // Kullanıcıya mesaj gönder
+            try {
+                SendMessage sendMessage = new SendMessage();
+                sendMessage.setChatId(chatId);
+                sendMessage.setText(messageBuilder.toString());
+
+                TelegramBot telegramBot = new TelegramBot(botName, botToken);
+
+                telegramBot.execute(sendMessage);
+            } catch (TelegramApiException e) {
+                log.error("Mesaj gönderilirken hata oluştu: {}", e.getMessage());
+            }
+        });
     }
 
     public List<Subscription> getAllSubscriptions() {

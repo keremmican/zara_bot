@@ -41,6 +41,11 @@ public class ProductService {
 
         Product product = productRepository.findByProductCodeAndColor(productCode, productColor);
 
+        if (product == null) {
+            log.warn("Ürün bulunamadı: ProductCode={}, Color={}", productCode, productColor);
+            return null;
+        }
+
         String discernProductId = product.getSeoDiscernProductId();
 
         HttpHeaders headers = new HttpHeaders();
@@ -255,6 +260,11 @@ public class ProductService {
 
     public List<Size> findSizesByProductCodeAndColor(String productCode, String color) {
         return productRepository.findSizesByProductCodeAndColor(productCode, color);
+    }
+
+    public String getProductName(String productCode, String color) {
+        Product product = productRepository.findByProductCodeAndColor(productCode, color);
+        return product != null ? product.getName() : "Bilinmiyor";
     }
 }
 

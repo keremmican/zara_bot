@@ -50,4 +50,15 @@ public class ScheduledTasks {
             log.error("Error checking availabilities.", e);
         }
     }
+
+    @Scheduled(cron = "0 0 12 * * ?") // Her gün öğlen 12'de çalışır
+    public void sendDailySubscriptionSummary() {
+        try {
+            subscriptionService.sendWeeklySubscriptionSummary();
+            log.info("Güncel abonelik listesi başarıyla gönderildi.");
+        } catch (Exception e) {
+            log.error("Güncel abonelik listesi gönderilirken hata oluştu.", e);
+        }
+    }
+
 }

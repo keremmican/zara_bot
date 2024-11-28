@@ -4,12 +4,16 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import lombok.AllArgsConstructor; // Ekle
 import lombok.Data;
+import lombok.NoArgsConstructor; // Ekle
 
 import java.time.ZonedDateTime;
 
 @Entity
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class Subscription {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -21,4 +25,12 @@ public class Subscription {
     private String lastAvailability;
     private ZonedDateTime subscriptionDate;
     private ZonedDateTime lastUpdate;
+
+    public Subscription(String productCode, String color, String size, String lastAvailability) {
+        this.productCode = productCode;
+        this.color = color;
+        this.size = size;
+        this.lastAvailability = lastAvailability;
+        this.subscriptionDate = ZonedDateTime.now();
+    }
 }

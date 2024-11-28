@@ -21,25 +21,16 @@ public class TestController {
 
     @GetMapping("/update-db")
     public void getCategoriesAndProducts() throws JsonProcessingException {
-        // Kategorileri çek ve kaydet
         categoryService.fetchAndSaveCategories();
-        System.out.println("Kategoriler güncellendi.");
-
-        // Alt kategorilerin API ID'lerini al
         List<Long> subcategoryApiIds = categoryService.findLeafCategoryApiIds();
-
-        // Alt kategoriler için ürünleri çek ve kaydet
         for (Long apiId : subcategoryApiIds) {
-            System.out.println("Ürünler çekiliyor. Kategori API ID: " + apiId);
             productService.fetchAndSaveProductsForCategory(apiId);
         }
-
-        System.out.println("Tüm ürünler güncellendi.");
     }
 
     @GetMapping("/update-product")
     public void getProducts() {
-        subscriptionService.checkAvailabilityChange();
+        subscriptionService.sendWeeklySubscriptionSummary();
     }
 }
 

@@ -2,6 +2,7 @@ package com.mican.zara.service;
 
 import com.mican.zara.model.Product;
 import com.mican.zara.model.Size;
+import com.mican.zara.model.Subscription;
 import com.mican.zara.model.enums.Availability;
 import com.mican.zara.model.request.SubscribeRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -152,20 +153,17 @@ public class TelegramBot extends TelegramLongPollingBot {
         message.setChatId(chatId.toString());
         message.setText("Lütfen bir beden seçin:");
 
-        // Belirli ürün kodu ve renge göre bedenleri alın ve uygun olanları filtreleyin
+        // Ürün kodu ve renge göre tüm bedenleri al
         List<Size> sizes = productService.findSizesByProductCodeAndColor(productCode, color);
-        List<Size> filteredSizes = sizes.stream()
-                .filter(size -> size.getAvailability() != Availability.IN_STOCK && size.getAvailability() != Availability.LOW_ON_STOCK)
-                .toList();
 
-        if (filteredSizes.isEmpty()) {
-            execute(new SendMessage(chatId.toString(), "Muhtemelen tüm bedenleri stokta (bi kontrol et derim)."));
+        if (sizes.isEmpty()) {
+            execute(new SendMessage(chatId.toString(), "Bu renk ve ürün için beden bulunamadı."));
             return;
         }
 
         InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
 
-        List<List<InlineKeyboardButton>> rows = filteredSizes.stream()
+        List<List<InlineKeyboardButton>> rows = sizes.stream()
                 .map(size -> {
                     InlineKeyboardButton button = new InlineKeyboardButton();
                     button.setText(size.getName() + " (" + size.getAvailability().toString() + ")");
@@ -183,26 +181,50 @@ public class TelegramBot extends TelegramLongPollingBot {
     private void processSubscription(Long chatId, String productCode, String color, String size, String availability) {
         log.info("Kullanıcı {} için abonelik başlatılıyor. Ürün kodu: {}, Renk: {}, Beden: {}", chatId, productCode, color, size);
 
-        SubscribeRequest subscribeRequest = new SubscribeRequest();
-        subscribeRequest.setChatId(chatId.toString());
-        subscribeRequest.setProductCode(productCode);
-        subscribeRequest.setColor(color);
-        subscribeRequest.setSize(size);
-        subscribeRequest.setAvailability(availability); // Enum değerine dönüştürerek ekliyoruz
+        // Ürün durumunu güncelle ve kontrol et
+        Product updatedProduct = productService.getAndUpdateProduct(new Subscription(productCode, color, size, availability));
 
-        boolean isSubscribed = subscriptionService.subscribeProduct(subscribeRequest);
+        if (updatedProduct != null) {
+            // Kullanıcının seçtiği bedenin durumunu kontrol et
+            Size matchingSize = updatedProduct.getSizes().stream()
+                    .filter(s -> s.getName().equalsIgnoreCase(size))
+                    .findFirst()
+                    .orElse(null);
 
-        if (isSubscribed) {
-            try {
-                execute(new SendMessage(chatId.toString(), "Abonelik başarıyla oluşturuldu! Ürün kodu: " + productCode + ", Renk: " + color + ", Beden: " + size));
-            } catch (TelegramApiException e) {
-                log.error("Abonelik başarı mesajı gönderilirken hata oluştu: {}", e.getMessage());
-            }
-        } else {
-            try {
-                execute(new SendMessage(chatId.toString(), "Bu ürüne zaten abonesiniz! Ürün kodu: " + productCode + ", Renk: " + color + ", Beden: " + size));
-            } catch (TelegramApiException e) {
-                log.error("Zaten abone mesajı gönderilirken hata oluştu: {}", e.getMessage());
+            if (matchingSize != null &&
+                    matchingSize.getAvailability() != Availability.IN_STOCK &&
+                    matchingSize.getAvailability() != Availability.LOW_ON_STOCK) {
+
+                log.info("Ürün stokta değil, abonelik başlatılıyor.");
+
+                SubscribeRequest subscribeRequest = new SubscribeRequest();
+                subscribeRequest.setChatId(chatId.toString());
+                subscribeRequest.setProductCode(productCode);
+                subscribeRequest.setColor(color);
+                subscribeRequest.setSize(size);
+                subscribeRequest.setAvailability(availability);
+
+                boolean isSubscribed = subscriptionService.subscribeProduct(subscribeRequest);
+
+                if (isSubscribed) {
+                    try {
+                        execute(new SendMessage(chatId.toString(), "Abonelik başarıyla oluşturuldu! Ürün kodu: " + productCode + ", Renk: " + color + ", Beden: " + size));
+                    } catch (TelegramApiException e) {
+                        log.error("Abonelik başarı mesajı gönderilirken hata oluştu: {}", e.getMessage());
+                    }
+                } else {
+                    try {
+                        execute(new SendMessage(chatId.toString(), "Bu ürüne zaten abonesiniz! Ürün kodu: " + productCode + ", Renk: " + color + ", Beden: " + size));
+                    } catch (TelegramApiException e) {
+                        log.error("Zaten abone mesajı gönderilirken hata oluştu: {}", e.getMessage());
+                    }
+                }
+            } else {
+                try {
+                    execute(new SendMessage(chatId.toString(), "Seçtiğiniz beden şu an stokta! Ürün kodu: " + productCode + ", Renk: " + color + ", Beden: " + size));
+                } catch (TelegramApiException e) {
+                    log.error("Stok mesajı gönderilirken hata oluştu: {}", e.getMessage());
+                }
             }
         }
     }
