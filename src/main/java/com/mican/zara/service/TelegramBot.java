@@ -155,7 +155,7 @@ public class TelegramBot extends TelegramLongPollingBot {
         // Belirli ürün kodu ve renge göre bedenleri alın ve uygun olanları filtreleyin
         List<Size> sizes = productService.findSizesByProductCodeAndColor(productCode, color);
         List<Size> filteredSizes = sizes.stream()
-                .filter(size -> size.getAvailability() != Availability.IN_STOCK)
+                .filter(size -> size.getAvailability() != Availability.IN_STOCK && size.getAvailability() != Availability.LOW_ON_STOCK)
                 .toList();
 
         if (filteredSizes.isEmpty()) {
