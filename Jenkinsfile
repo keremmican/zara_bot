@@ -1,26 +1,40 @@
 pipeline {
     agent any
+    environment {
+        DOCKER_IMAGE = "zara-bot:latest" // Docker image adı
+    }
     stages {
         stage('Checkout') {
             steps {
+                // GitHub'dan kodu çek
                 checkout scm
             }
         }
         stage('Build') {
             steps {
-                sh 'chmod +x mvnw' // Maven Wrapper'ı çalıştırılabilir yap
-                sh './mvnw clean package' // Projeyi derle ve paketle
+                // Maven ile projeyi build et
+                sh 'chmod +x mvnw'
+                sh './mvnw clean package'
             }
         }
-        stage('Deploy') {
+        stage('Docker Build') {
             steps {
+                // Docker image oluştur
+                sh 'docker build -t $DOCKER_IMAGE .'
+            }
+        }
+        stage('Docker Run') {
+            steps {
+                // Önceki container'ı durdur ve sil
                 sh '''
-                pid=$(pgrep -f zara-0.0.1-SNAPSHOT.jar) || true
-                if [ -n "$pid" ]; then
-                    kill -9 $pid
+                if [ $(docker ps -q -f name=zara-bot-container) ]; then
+                    docker stop zara-bot-container
+                    docker rm zara-bot-container
                 fi
-
-                nohup java -jar target/zara-0.0.1-SNAPSHOT.jar > app.log 2>&1 &
+                '''
+                // Yeni container'ı başlat
+                sh '''
+                docker run -d --name zara-bot-container -p 8080:8080 $DOCKER_IMAGE
                 '''
             }
         }
