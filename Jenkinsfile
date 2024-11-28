@@ -34,7 +34,7 @@ pipeline {
                 '''
                 // Yeni container'ı başlat
                 sh '''
-                docker run -d --name zara-bot-container -p 8080:8080 $DOCKER_IMAGE
+                docker run -d --name zara-bot-container -p 8088:8088 $DOCKER_IMAGE
                 '''
             }
         }
