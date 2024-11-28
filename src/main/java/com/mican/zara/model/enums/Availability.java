@@ -6,6 +6,7 @@ public enum Availability {
     IN_STOCK,
     OUT_OF_STOCK,
     COMING_SOON,
+    LOW_ON_STOCK,
     UNKNOWN;
 
     public static Availability fromString(String value) {
