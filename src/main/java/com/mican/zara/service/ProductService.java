@@ -77,43 +77,53 @@ public class ProductService {
                 JsonNode colorsNode = detailNode.get("colors");
 
                 if (colorsNode != null && colorsNode.isArray()) {
-                    colorsNode.forEach(colorNode -> {ColorDto colorDto;
+                    colorsNode.forEach(colorNode -> {
                         try {
-                            colorDto = objectMapper.treeToValue(colorNode, ColorDto.class);
+                            // Color bilgilerini al
+                            ColorDto colorDto = objectMapper.treeToValue(colorNode, ColorDto.class);
+
+                            // Subscription'daki renk ile eşleşmiyorsa atla
+                            if (!colorDto.getName().equalsIgnoreCase(productColor)) {
+                                return;
+                            }
+
+                            // Fiyat bilgisi
+                            BigDecimal rawPrice = colorDto.getPrice();
+                            BigDecimal price = rawPrice.divide(BigDecimal.valueOf(100), RoundingMode.HALF_UP);
+
+                            product.setPrice(price);
+                            product.setColor(colorDto.getName());
+
+                            // Görsel URL'sini ayarla
+                            if (colorDto.getXmedia() != null && !colorDto.getXmedia().isEmpty()) {
+                                product.setImageUrl(colorDto.getXmedia().get(0).getUrl().replace("{width}", "800"));
+                            }
+
+                            // Beden bilgilerini al
+                            List<Size> sizes = new ArrayList<>();
+                            JsonNode sizesNode = colorNode.get("sizes");
+                            if (sizesNode != null) {
+                                sizesNode.forEach(sizeNode -> {
+                                    try {
+                                        AvailabilityDto availabilityDto = objectMapper.treeToValue(sizeNode, AvailabilityDto.class);
+
+                                        Size size = new Size();
+                                        size.setName(availabilityDto.getName());
+                                        size.setAvailability(Availability.fromString(availabilityDto.getAvailability()));
+                                        sizes.add(size);
+                                    } catch (Exception e) {
+                                        log.error("Size parsing error: {}", e.getMessage());
+                                    }
+                                });
+                            }
+                            product.setSizes(sizes);
+
+                            // Ürünü kaydet
+                            log.info(product.getId() == null ? "Updating product: {}" : "Updating existing product: {}", product);
+                            productRepository.saveAndFlush(product);
                         } catch (JsonProcessingException e) {
-                            return;
+                            log.error("Color parsing error: {}", e.getMessage());
                         }
-
-                        BigDecimal rawPrice = colorDto.getPrice();
-                        BigDecimal price = rawPrice.divide(BigDecimal.valueOf(100), RoundingMode.HALF_UP);
-
-                        product.setPrice(price);
-                        product.setColor(colorDto.getName());
-
-                        if (colorDto.getXmedia() != null && !colorDto.getXmedia().isEmpty()) {
-                            product.setImageUrl(colorDto.getXmedia().get(0).getUrl().replace("{width}", "800"));
-                        }
-
-                        List<Size> sizes = new ArrayList<>();
-                        JsonNode sizesNode = colorNode.get("sizes");
-                        if (sizesNode != null) {
-                            sizesNode.forEach(sizeNode -> {
-                                try {
-                                    AvailabilityDto availabilityDto = objectMapper.treeToValue(sizeNode, AvailabilityDto.class);
-
-                                    Size size = new Size();
-                                    size.setName(availabilityDto.getName());
-                                    size.setAvailability(Availability.fromString(availabilityDto.getAvailability()));
-                                    sizes.add(size);
-                                } catch (Exception e) {
-
-                                }
-                            });
-                        }
-                        product.setSizes(sizes);
-
-                        log.info(product.getId() == null ? "Updating product: {}" : "Updating existing product: {}", product);
-                        productRepository.saveAndFlush(product);
                     });
                 }
             }

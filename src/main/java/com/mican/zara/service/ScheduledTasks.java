@@ -51,13 +51,13 @@ public class ScheduledTasks {
         }
     }
 
-    @Scheduled(cron = "0 0 12 * * ?") // Her gün öğlen 12'de çalışır
-    public void sendDailySubscriptionSummary() {
+    @Scheduled(cron = "0 0 12 * * MON") // Her Pazartesi öğlen 12'de çalışır
+    public void sendWeeklySubscriptionSummary() {
         try {
             subscriptionService.sendWeeklySubscriptionSummary();
-            log.info("Güncel abonelik listesi başarıyla gönderildi.");
+            log.info("Haftalık abonelik listesi başarıyla gönderildi.");
         } catch (Exception e) {
-            log.error("Güncel abonelik listesi gönderilirken hata oluştu.", e);
+            log.error("Haftalık abonelik listesi gönderilirken hata oluştu.", e);
         }
     }
 

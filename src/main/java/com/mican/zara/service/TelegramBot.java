@@ -53,6 +53,11 @@ public class TelegramBot extends TelegramLongPollingBot {
             try {
                 if ("/start".equals(userInput)) {
                     execute(new SendMessage(chatId.toString(), "Zara stok botuna hoşgeldin! Ürün stok takibi için ürün kodunu yaz ve seçenekleri takip et.\n\nÖrnek format: 1255/768"));
+                } else if ("/list".equals(userInput)) {
+                    log.info("Kullanıcıdan '/list' komutu alındı: ChatId={}", chatId);
+
+                    // Kullanıcının aboneliklerini gönder
+                    subscriptionService.sendUserSubscriptionList(chatId);
                 } else if (isValidProductCode(userInput)) {
                     // Kullanıcıdan gelen ürün koduna göre ürünleri getir
                     List<Product> products = productService.findAllByProductCode(userInput);
@@ -166,7 +171,7 @@ public class TelegramBot extends TelegramLongPollingBot {
         List<List<InlineKeyboardButton>> rows = sizes.stream()
                 .map(size -> {
                     InlineKeyboardButton button = new InlineKeyboardButton();
-                    button.setText(size.getName() + " (" + size.getAvailability().toString() + ")");
+                    button.setText(size.getName());
                     button.setCallbackData("size_" + productCode + "_" + color + "_" + size.getName() + "_" + size.getAvailability().toString());
                     return List.of(button);
                 })

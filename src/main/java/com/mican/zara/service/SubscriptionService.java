@@ -13,6 +13,7 @@ import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -27,6 +28,8 @@ public class SubscriptionService {
     private String botName;
     @Value("${bot.token}")
     private String botToken;
+
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("dd MMMM yyyy, HH:mm");
 
     public boolean subscribeProduct(SubscribeRequest request) {
         String size = request.getSize();
@@ -153,7 +156,7 @@ public class SubscriptionService {
                         .append("📦 Ürün İsmi: ").append(productService.getProductName(subscription.getProductCode(), subscription.getColor())).append("\n")
                         .append("🎨 Renk: ").append(subscription.getColor()).append("\n")
                         .append("📏 Beden: ").append(subscription.getSize()).append("\n")
-                        .append("⏰ Abonelik Tarihi: ").append(subscription.getSubscriptionDate()).append("\n\n");
+                        .append("⏰ Abonelik Tarihi: ").append(subscription.getSubscriptionDate().format(DATE_FORMATTER)).append("\n\n");
             }
 
             // Kullanıcıya mesaj gönder
@@ -169,6 +172,42 @@ public class SubscriptionService {
                 log.error("Mesaj gönderilirken hata oluştu: {}", e.getMessage());
             }
         });
+    }
+
+    public void sendUserSubscriptionList(Long chatId) {
+        List<Subscription> userSubscriptions = getAllSubscriptions()
+                .stream()
+                .filter(subscription -> subscription.getChatId().equals(chatId.toString()))
+                .toList();
+
+        TelegramBot telegramBot = new TelegramBot(botName, botToken);
+
+        if (userSubscriptions.isEmpty()) {
+            try {
+                telegramBot.execute(new SendMessage(chatId.toString(), "Henüz abonelik oluşturmadınız."));
+                return;
+            } catch (TelegramApiException e) {
+                log.error("Boş abonelik mesajı gönderilirken hata oluştu: {}", e.getMessage());
+                return;
+            }
+        }
+
+        StringBuilder messageBuilder = new StringBuilder();
+        messageBuilder.append("📜 Güncel Abonelik Listesi:\n\n");
+
+        for (Subscription subscription : userSubscriptions) {
+            messageBuilder.append("🛒 Ürün Kodu: ").append(subscription.getProductCode()).append("\n")
+                    .append("📦 Ürün İsmi: ").append(productService.getProductName(subscription.getProductCode(), subscription.getColor())).append("\n")
+                    .append("🎨 Renk: ").append(subscription.getColor()).append("\n")
+                    .append("📏 Beden: ").append(subscription.getSize()).append("\n")
+                    .append("⏰ Abonelik Tarihi: ").append(subscription.getSubscriptionDate().format(DATE_FORMATTER)).append("\n\n");
+        }
+
+        try {
+            telegramBot.execute(new SendMessage(chatId.toString(), messageBuilder.toString()));
+        } catch (TelegramApiException e) {
+            log.error("Abonelik listesi mesajı gönderilirken hata oluştu: {}", e.getMessage());
+        }
     }
 
     public List<Subscription> getAllSubscriptions() {
