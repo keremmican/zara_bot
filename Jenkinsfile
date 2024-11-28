@@ -9,7 +9,7 @@ pipeline {
         stage('Build') {
             steps {
                 sh 'chmod +x mvnw' // Çalıştırma izni veriliyor
-                sh 'MAVEN_OPTS="-Xms128m -Xmx256m" ./mvnw clean package'
+                sh './mvnw clean package' // Maven Wrapper ile build
             }
         }
         stage('Deploy') {
