@@ -18,6 +18,7 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKe
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -94,7 +95,8 @@ public class TelegramBot extends TelegramLongPollingBot {
                     String productCode = dataParts[1];
                     String color = dataParts[2];
                     String size = dataParts[3];
-                    String availability = dataParts[4];
+                    String availability = String.join("_",
+                            Arrays.copyOfRange(dataParts, 4, dataParts.length));
 
                     processSubscription(chatId, productCode, color, size, availability);
                     execute(new SendMessage(chatId.toString(), "Başka bir ürün takip isteğiniz varsa iletebilirsiniz!"));
@@ -226,7 +228,7 @@ public class TelegramBot extends TelegramLongPollingBot {
                 }
             } else {
                 try {
-                    execute(new SendMessage(chatId.toString(), "Seçtiğiniz beden şu an stokta! Ürün kodu: " + productCode + ", Renk: " + color + ", Beden: " + size));
+                    execute(new SendMessage(chatId.toString(), "Seçtiğiniz beden zaten stokta."));
                 } catch (TelegramApiException e) {
                     log.error("Stok mesajı gönderilirken hata oluştu: {}", e.getMessage());
                 }
