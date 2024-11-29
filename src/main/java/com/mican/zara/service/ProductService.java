@@ -118,6 +118,15 @@ public class ProductService {
                             }
                             product.setSizes(sizes);
 
+                            // Ürün bağlantısını oluştur
+                            String productLink = String.format(
+                                    "https://www.zara.com/tr/tr/%s-p%s.html?v1=%s",
+                                    product.getSeoKeyword(),
+                                    product.getSeoProductId(),
+                                    product.getSeoDiscernProductId()
+                            );
+                            product.setProductLink(productLink);
+
                             // Ürünü kaydet
                             log.info(product.getId() == null ? "Updating product: {}" : "Updating existing product: {}", product);
                             productRepository.saveAndFlush(product);
@@ -237,6 +246,14 @@ public class ProductService {
                                             }
                                             product.setSizes(sizes);
 
+                                            String productLink = String.format(
+                                                    "https://www.zara.com/tr/tr/%s-p%s.html?v1=%s",
+                                                    product.getSeoKeyword(),
+                                                    product.getSeoProductId(),
+                                                    product.getSeoDiscernProductId()
+                                            );
+                                            product.setProductLink(productLink);
+
                                             log.info(product.getId() == null ? "Saving new product: {}" : "Updating existing product: {}", product);
                                             productRepository.saveAndFlush(product);
                                         });
@@ -275,6 +292,10 @@ public class ProductService {
     public String getProductName(String productCode, String color) {
         Product product = productRepository.findByProductCodeAndColor(productCode, color);
         return product != null ? product.getName() : "Bilinmiyor";
+    }
+
+    public Product findByProductCodeAndColor(String productCode, String color) {
+        return productRepository.findByProductCodeAndColor(productCode, color);
     }
 }
 

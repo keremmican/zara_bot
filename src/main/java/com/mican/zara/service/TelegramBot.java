@@ -53,7 +53,11 @@ public class TelegramBot extends TelegramLongPollingBot {
 
             try {
                 if ("/start".equals(userInput)) {
-                    execute(new SendMessage(chatId.toString(), "Zara stok botuna hoşgeldin! Ürün stok takibi için ürün kodunu yaz ve seçenekleri takip et.\n\nÖrnek format: 1255/768"));
+                    // İlk sohbet açıldığında bilgilendirme mesajını gönder
+                    sendWelcomeMessage(chatId);
+                } else if ("/bilgi".equals(userInput)) {
+                    // Kullanıcı bilgi almak istediğinde
+                    sendUsageInfo(chatId);
                 } else if ("/list".equals(userInput)) {
                     log.info("Kullanıcıdan '/list' komutu alındı: ChatId={}", chatId);
 
@@ -85,7 +89,15 @@ public class TelegramBot extends TelegramLongPollingBot {
             Long chatId = update.getCallbackQuery().getMessage().getChatId();
 
             try {
-                if (callbackData.startsWith("color_")) {
+                if (callbackData.startsWith("continue_")) {
+                    // Kullanıcı aboneliğe devam etmek istiyor
+                    String subscriptionId = callbackData.split("_")[1];
+                    subscriptionService.processContinueSubscription(chatId, subscriptionId);
+                } else if (callbackData.startsWith("cancel_")) {
+                    // Kullanıcı aboneliği sonlandırmak istiyor
+                    String subscriptionId = callbackData.split("_")[1];
+                    subscriptionService.processCancelSubscription(chatId, subscriptionId);
+                } else if (callbackData.startsWith("color_")) {
                     String[] dataParts = callbackData.split("_");
                     String productCode = dataParts[1];
                     String color = dataParts[2];
@@ -234,6 +246,44 @@ public class TelegramBot extends TelegramLongPollingBot {
                 }
             }
         }
+    }
+
+    private void sendWelcomeMessage(Long chatId) throws TelegramApiException {
+        String welcomeMessage = """
+                📖 *Zara Stok Bot Kullanım Rehberi*:
+
+                - Ürün stok takibi yapmak için ürün kodunu şu formatta yazabilirsiniz: `1255/768`
+                - `/list` komutunu kullanarak mevcut aboneliklerinizi listeleyebilirsiniz.
+                - Aboneliklerinizin süresi 21 gün olup, 21 gün sonra otomatik olarak silinir.
+                - Stok durumu değiştiğinde size bildirim gönderilecektir.
+
+                ✨ *Başlamak için bir ürün kodu yazın ve seçenekleri takip edin!* ✨
+                """;
+
+        SendMessage message = new SendMessage();
+        message.setChatId(chatId.toString());
+        message.setText(welcomeMessage);
+        message.setParseMode("Markdown");
+        execute(message);
+    }
+
+    private void sendUsageInfo(Long chatId) throws TelegramApiException {
+        String usageInfo = """
+                📖 *Zara Stok Bot Kullanım Rehberi*:
+
+                - Ürün stok takibi yapmak için ürün kodunu şu formatta yazabilirsiniz: `1255/768`
+                - `/list` komutunu kullanarak mevcut aboneliklerinizi listeleyebilirsiniz.
+                - Aboneliklerinizin süresi 21 gün olup, 21 gün sonra otomatik olarak silinir.
+                - Stok durumu değiştiğinde size bildirim gönderilecektir.
+
+                ✨ *Başlamak için bir ürün kodu yazın ve seçenekleri takip edin!* ✨
+                """;
+
+        SendMessage message = new SendMessage();
+        message.setChatId(chatId.toString());
+        message.setText(usageInfo);
+        message.setParseMode("Markdown");
+        execute(message);
     }
 
     private boolean isValidProductCode(String input) {

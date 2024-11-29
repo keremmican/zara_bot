@@ -25,6 +25,9 @@ public class Subscription {
     private String lastAvailability;
     private ZonedDateTime subscriptionDate;
     private ZonedDateTime lastUpdate;
+    private boolean waitingForResponse = false;
+    private String productLink;
+    private String productName;
 
     public Subscription(String productCode, String color, String size, String lastAvailability) {
         this.productCode = productCode;

@@ -40,4 +40,6 @@ public class Product {
     private String seoKeyword;
     private String seoProductId;
     private String seoDiscernProductId;
+
+    private String productLink;
 }
