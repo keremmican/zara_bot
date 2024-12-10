@@ -26,6 +26,7 @@ public class Subscription {
     private ZonedDateTime subscriptionDate;
     private ZonedDateTime lastUpdate;
     private boolean waitingForResponse = false;
+    private boolean isActive = true;
     private String productLink;
     private String productName;
 

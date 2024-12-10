@@ -308,6 +308,7 @@ public class SubscriptionService {
 
         // Yanıt bekleme durumunu kaldır
         subscription.setWaitingForResponse(false);
+        subscription.setLastUpdate(ZonedDateTime.now());
         saveSubscription(subscription);
 
         // Stok durumunu kontrol et
@@ -317,30 +318,28 @@ public class SubscriptionService {
                 .findFirst()
                 .orElse(null);
 
-        if (matchingSize != null &&
-                (matchingSize.getAvailability() == Availability.IN_STOCK ||
-                        matchingSize.getAvailability() == Availability.LOW_ON_STOCK)) {
+        try {
+            if (matchingSize != null &&
+                    (matchingSize.getAvailability() == Availability.IN_STOCK ||
+                            matchingSize.getAvailability() == Availability.LOW_ON_STOCK)) {
 
-            // Ürün stokta
-            try {
-                telegramBot.execute(new SendMessage(chatId.toString(), "Bu ürün zaten stokta. Aboneliğiniz sonlandırıldı."));
-            } catch (TelegramApiException e) {
-                log.error("Mesaj gönderilirken hata oluştu: {}", e.getMessage());
+                // Ürün stokta
+                subscription.setActive(false); // Abonelik pasif hale getiriliyor
+                saveSubscription(subscription);
+
+                telegramBot.execute(new SendMessage(chatId.toString(), "Bu ürün zaten stokta. Abonelik pasif hale getirildi."));
+            } else {
+                // Abonelik aktif olarak devam eder
+                subscription.setActive(true);
+                saveSubscription(subscription);
+
+                telegramBot.execute(new SendMessage(chatId.toString(), "Aboneliğiniz aktif olarak devam ediyor."));
             }
-
-            deleteSubscription(subscription.getId());
-        } else {
-            // Abonelik devam ediyor
-            subscription.setSubscriptionDate(ZonedDateTime.now());
-            saveSubscription(subscription);
-
-            try {
-                telegramBot.execute(new SendMessage(chatId.toString(), "Aboneliğiniz devam ediyor."));
-            } catch (TelegramApiException e) {
-                log.error("Mesaj gönderilirken hata oluştu: {}", e.getMessage());
-            }
+        } catch (TelegramApiException e) {
+            log.error("Mesaj gönderilirken hata oluştu: {}", e.getMessage());
         }
     }
+
 
     @Scheduled(fixedRate = 60000) // Her dakika çalışır
     public void checkResponseTimeouts() {
@@ -352,16 +351,19 @@ public class SubscriptionService {
         for (Subscription subscription : subscriptions) {
             // 2 saatlik zaman aşımı kontrolü
             if (subscription.getSubscriptionDate().isBefore(ZonedDateTime.now().minusHours(2))) {
-                log.info("Yanıt bekleme süresi dolduğu için abonelik sonlandırılıyor: {}", subscription);
+                log.info("Yanıt bekleme süresi dolduğu için abonelik pasif hale getiriliyor: {}", subscription);
 
                 // Kullanıcıya bilgi mesajı gönder
                 notifyUserTimeout(subscription);
 
-                // Aboneliği kaldır
-                subscriptionRepository.delete(subscription);
+                // Aboneliği pasif yap
+                subscription.setActive(false);
+                subscription.setWaitingForResponse(false);
+                saveSubscription(subscription);
             }
         }
     }
+
 
     private void notifyUserTimeout(Subscription subscription) {
         try {
@@ -372,7 +374,7 @@ public class SubscriptionService {
                             "Ürün Kodu: %s\n" +
                             "Renk: %s\n" +
                             "Beden: %s\n\n" +
-                            "Aboneliğiniz 2 saat içinde bir işlem yapılmadığı için otomatik olarak sonlandırıldı.",
+                            "Aboneliğiniz 2 saat içinde bir işlem yapılmadığı için pasif hale getirildi.",
                     subscription.getProductName(),
                     subscription.getProductCode(),
                     subscription.getColor(),
