@@ -11,6 +11,7 @@ import com.mican.zara.model.dto.ProductDto;
 import com.mican.zara.model.enums.Availability;
 import com.mican.zara.model.response.ProductGroupsResponse;
 import com.mican.zara.repository.ProductRepository;
+import com.mican.zara.repository.SizeRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -34,6 +35,7 @@ public class ProductService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final ProductRepository productRepository;
+    private final SizeRepository sizeRepository;
 
     public Product getAndUpdateProduct(Subscription subscription) {
         String productCode = subscription.getProductCode();
@@ -54,7 +56,6 @@ public class ProductService {
         HttpEntity<String> entity = new HttpEntity<>(headers);
 
         // Availability URL oluştur
-
         String availabilityUrl = String.format("https://www.zara.com/tr/tr/products-details?productIds=%s&ajax=true", discernProductId);
 
         try {
@@ -62,9 +63,7 @@ public class ProductService {
                     availabilityUrl, HttpMethod.GET, entity, String.class);
 
             ArrayNode productArrayNode = (ArrayNode) objectMapper.readTree(availabilityResponse.getBody());
-
             JsonNode productNode = productArrayNode.get(0);
-
             JsonNode detailNode = productNode.get("detail");
 
             if (detailNode != null) {
@@ -99,24 +98,43 @@ public class ProductService {
                                 product.setImageUrl(colorDto.getXmedia().get(0).getUrl().replace("{width}", "800"));
                             }
 
-                            // Beden bilgilerini al
-                            List<Size> sizes = new ArrayList<>();
+                            // Gelen size bilgilerini işle
+                            List<Size> existingSizes = product.getSizes(); // Mevcut size'ları al
+                            List<Size> updatedSizes = new ArrayList<>(); // Güncellenmiş size'ları topla
+
                             JsonNode sizesNode = colorNode.get("sizes");
                             if (sizesNode != null) {
                                 sizesNode.forEach(sizeNode -> {
                                     try {
                                         AvailabilityDto availabilityDto = objectMapper.treeToValue(sizeNode, AvailabilityDto.class);
+                                        String sizeName = availabilityDto.getName();
 
-                                        Size size = new Size();
-                                        size.setName(availabilityDto.getName());
-                                        size.setAvailability(Availability.fromString(availabilityDto.getAvailability()));
-                                        sizes.add(size);
+                                        // Mevcut size kaydını bul
+                                        Size existingSize = existingSizes.stream()
+                                                .filter(s -> s.getName().equalsIgnoreCase(sizeName))
+                                                .findFirst()
+                                                .orElse(null);
+
+                                        if (existingSize != null) {
+                                            // Mevcut kaydı güncelle
+                                            existingSize.setAvailability(Availability.fromString(availabilityDto.getAvailability()));
+                                            updatedSizes.add(existingSize);
+                                        } else {
+                                            // Yeni size oluştur
+                                            Size size = new Size();
+                                            size.setName(sizeName);
+                                            size.setAvailability(Availability.fromString(availabilityDto.getAvailability()));
+                                            updatedSizes.add(size);
+                                        }
                                     } catch (Exception e) {
                                         log.error("Size parsing error: {}", e.getMessage());
                                     }
                                 });
                             }
-                            product.setSizes(sizes);
+
+                            // Eski size'ları temizle ve güncellenmiş size'ları ekle
+                            product.getSizes().clear();
+                            product.getSizes().addAll(updatedSizes);
 
                             // Ürün bağlantısını oluştur
                             String productLink = String.format(
@@ -128,7 +146,7 @@ public class ProductService {
                             product.setProductLink(productLink);
 
                             // Ürünü kaydet
-                            log.info(product.getId() == null ? "Updating product: {}" : "Updating existing product: {}", product);
+                            log.info(product.getId() == null ? "Creating new product: {}" : "Updating existing product: {}", product);
                             productRepository.saveAndFlush(product);
                         } catch (JsonProcessingException e) {
                             log.error("Color parsing error: {}", e.getMessage());
@@ -137,7 +155,7 @@ public class ProductService {
                 }
             }
         } catch (Exception ignored) {
-
+            log.error("Product update failed for ProductCode={}, Color={}", productCode, productColor);
         }
 
         return product;
@@ -297,5 +315,28 @@ public class ProductService {
     public Product findByProductCodeAndColor(String productCode, String color) {
         return productRepository.findByProductCodeAndColor(productCode, color);
     }
+
+    public Size findSizeById(Long id) {
+        return sizeRepository.findById(id).orElse(null);
+    }
+
+    public Product getAndUpdateProductBySizeId(Long sizeId) {
+        Size size = findSizeById(sizeId);
+        log.info("findSizeById sonucu: {}", size);
+
+        if (size == null) {
+            log.error("Size bulunamadı: sizeId={}", sizeId);
+            return null;
+        }
+
+        Product product = productRepository.findBySizesContaining(size);
+        log.info("findBySizesContaining sonucu: {}", product);
+
+        if (product == null) {
+            log.error("Product bulunamadı: sizeId={}", sizeId);
+        }
+        return product;
+    }
+
 }
 

@@ -20,4 +20,11 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     @Query("SELECT s FROM Product p JOIN p.sizes s WHERE p.productCode = :productCode AND p.color = :color")
     List<Size> findSizesByProductCodeAndColor(String productCode, String color);
+
+    @Query("SELECT p FROM Product p JOIN p.sizes s WHERE s.id = :sizeId")
+    Product findProductBySizeId(@Param("sizeId") Long sizeId);
+
+    @Query("SELECT p FROM Product p JOIN FETCH p.sizes s WHERE s = :size")
+    Product findBySizesContaining(@Param("size") Size size);
+
 }

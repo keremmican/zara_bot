@@ -17,8 +17,10 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMa
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
+import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
 import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
@@ -45,9 +47,15 @@ public class TelegramBot extends TelegramLongPollingBot {
         this.subscriptionService = subscriptionService;
     }
 
-    private String decodeInput(String input) {
-        return URLDecoder.decode(input, StandardCharsets.UTF_8);
+    private String encodeForCallback(String input) {
+        return URLEncoder.encode(input, StandardCharsets.UTF_8); // UTF-8 encoding
     }
+
+
+    private String decodeInput(String input) {
+        return URLDecoder.decode(input, StandardCharsets.UTF_8); // UTF-8 decoding
+    }
+
 
     @Override
     public void onUpdateReceived(Update update) {
@@ -101,12 +109,9 @@ public class TelegramBot extends TelegramLongPollingBot {
                     sendSizeOptions(chatId, productCode, color);
                 } else if (callbackData.startsWith("size_")) {
                     String[] dataParts = callbackData.split("_");
-                    String productCode = decodeInput(dataParts[1]); // Decode edilen productCode
-                    String color = decodeInput(dataParts[2]); // Decode edilen color
-                    String size = decodeInput(dataParts[3]); // Decode edilen size
-                    String availability = String.join("_", Arrays.copyOfRange(dataParts, 4, dataParts.length));
+                    Long sizeId = Long.parseLong(dataParts[1]); // sizeId'yi alıyoruz
 
-                    processSubscription(chatId, productCode, color, size, availability);
+                    processSubscription(chatId, sizeId);
                     execute(new SendMessage(chatId.toString(), "Başka bir ürün takip isteğiniz varsa iletebilirsiniz!"));
                 }
             } catch (TelegramApiException e) {
@@ -164,9 +169,6 @@ public class TelegramBot extends TelegramLongPollingBot {
     }
 
     private void sendSizeOptions(Long chatId, String productCode, String color) throws TelegramApiException {
-        productCode = decodeInput(productCode); // Decode işlemi
-        color = decodeInput(color); // Decode işlemi
-
         SendMessage message = new SendMessage();
         message.setChatId(chatId.toString());
         message.setText("Lütfen bir beden seçin:");
@@ -179,13 +181,12 @@ public class TelegramBot extends TelegramLongPollingBot {
         }
 
         InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
-        String finalProductCode = productCode;
-        String finalColor = color;
+
         List<List<InlineKeyboardButton>> rows = sizes.stream()
                 .map(size -> {
                     InlineKeyboardButton button = new InlineKeyboardButton();
-                    button.setText(size.getName());
-                    button.setCallbackData("size_" + finalProductCode + "_" + finalColor + "_" + size.getName() + "_" + size.getAvailability().toString());
+                    button.setText(size.getName()); // Gösterilecek beden adı
+                    button.setCallbackData("size_" + size.getId()); // Sadece sizeId gönderiliyor
                     return List.of(button);
                 })
                 .toList();
@@ -196,43 +197,50 @@ public class TelegramBot extends TelegramLongPollingBot {
         execute(message);
     }
 
-    private void processSubscription(Long chatId, String productCode, String color, String size, String availability) {
-        log.info("Kullanıcı {} için abonelik başlatılıyor. Ürün kodu: {}, Renk: {}, Beden: {}", chatId, productCode, color, size);
+    private void processSubscription(Long chatId, Long sizeId) {
+        log.info("Kullanıcı {} için abonelik başlatılıyor. SizeId: {}", chatId, sizeId);
 
-        // Ürün durumunu güncelle ve kontrol et
-        Product updatedProduct = productService.getAndUpdateProduct(new Subscription(productCode, color, size, availability));
+        // Size objesini sizeId ile al
+        Size selectedSize = productService.findSizeById(sizeId); // Bu metodu ProductService'de tanımlayın
+
+        if (selectedSize == null) {
+            log.error("Size bulunamadı. SizeId: {}", sizeId);
+            try {
+                execute(new SendMessage(chatId.toString(), "Seçtiğiniz beden bulunamadı."));
+            } catch (TelegramApiException e) {
+                log.error("Hata mesajı gönderilirken hata oluştu: {}", e.getMessage());
+            }
+            return;
+        }
+
+        Product p = productService.getAndUpdateProductBySizeId(sizeId);
+        Product updatedProduct = productService.getAndUpdateProduct(new Subscription(p.getProductCode(), p.getColor(), selectedSize.getName(), selectedSize.getAvailability().toString()));
+
 
         if (updatedProduct != null) {
-            // Kullanıcının seçtiği bedenin durumunu kontrol et
-            Size matchingSize = updatedProduct.getSizes().stream()
-                    .filter(s -> s.getName().equalsIgnoreCase(size))
-                    .findFirst()
-                    .orElse(null);
-
-            if (matchingSize != null &&
-                    matchingSize.getAvailability() != Availability.IN_STOCK &&
-                    matchingSize.getAvailability() != Availability.LOW_ON_STOCK) {
+            if (selectedSize.getAvailability() != Availability.IN_STOCK &&
+                    selectedSize.getAvailability() != Availability.LOW_ON_STOCK) {
 
                 log.info("Ürün stokta değil, abonelik başlatılıyor.");
 
                 SubscribeRequest subscribeRequest = new SubscribeRequest();
                 subscribeRequest.setChatId(chatId.toString());
-                subscribeRequest.setProductCode(productCode);
-                subscribeRequest.setColor(color);
-                subscribeRequest.setSize(size);
-                subscribeRequest.setAvailability(availability);
+                subscribeRequest.setProductCode(updatedProduct.getProductCode());
+                subscribeRequest.setColor(updatedProduct.getColor());
+                subscribeRequest.setSize(selectedSize.getName());
+                subscribeRequest.setAvailability(selectedSize.getAvailability().toString());
 
                 boolean isSubscribed = subscriptionService.subscribeProduct(subscribeRequest);
 
                 if (isSubscribed) {
                     try {
-                        execute(new SendMessage(chatId.toString(), "Abonelik başarıyla oluşturuldu! Ürün kodu: " + productCode + ", Renk: " + color + ", Beden: " + size));
+                        execute(new SendMessage(chatId.toString(), "Abonelik başarıyla oluşturuldu! Ürün kodu: " + updatedProduct.getProductCode() + ", Renk: " + updatedProduct.getColor() + ", Beden: " + selectedSize.getName()));
                     } catch (TelegramApiException e) {
                         log.error("Abonelik başarı mesajı gönderilirken hata oluştu: {}", e.getMessage());
                     }
                 } else {
                     try {
-                        execute(new SendMessage(chatId.toString(), "Bu ürüne zaten abonesiniz! Ürün kodu: " + productCode + ", Renk: " + color + ", Beden: " + size));
+                        execute(new SendMessage(chatId.toString(), "Bu ürüne zaten abonesiniz! Ürün kodu: " + updatedProduct.getProductCode() + ", Renk: " + updatedProduct.getColor() + ", Beden: " + selectedSize.getName()));
                     } catch (TelegramApiException e) {
                         log.error("Zaten abone mesajı gönderilirken hata oluştu: {}", e.getMessage());
                     }
