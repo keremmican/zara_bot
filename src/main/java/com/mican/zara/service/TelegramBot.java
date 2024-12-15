@@ -18,6 +18,8 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKe
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.math.BigDecimal;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -43,36 +45,33 @@ public class TelegramBot extends TelegramLongPollingBot {
         this.subscriptionService = subscriptionService;
     }
 
+    private String decodeInput(String input) {
+        return URLDecoder.decode(input, StandardCharsets.UTF_8);
+    }
+
     @Override
     public void onUpdateReceived(Update update) {
         if (update.hasMessage() && update.getMessage().hasText()) {
             Message message = update.getMessage();
             var chatId = message.getChatId();
-            String userInput = message.getText().trim();
-            log.info("message received: {}", message);
+            String userInput = decodeInput(message.getText().trim()); // Gelen mesajı decode et
+            log.info("Decoded message received: {}", userInput);
 
             try {
                 if ("/start".equals(userInput)) {
-                    // İlk sohbet açıldığında bilgilendirme mesajını gönder
                     sendWelcomeMessage(chatId);
                 } else if ("/bilgi".equals(userInput)) {
-                    // Kullanıcı bilgi almak istediğinde
                     sendUsageInfo(chatId);
                 } else if ("/list".equals(userInput)) {
                     log.info("Kullanıcıdan '/list' komutu alındı: ChatId={}", chatId);
-
-                    // Kullanıcının aboneliklerini gönder
                     subscriptionService.sendUserSubscriptionList(chatId);
                 } else if (isValidProductCode(userInput)) {
-                    // Kullanıcıdan gelen ürün koduna göre ürünleri getir
                     List<Product> products = productService.findAllByProductCode(userInput);
 
                     if (!products.isEmpty()) {
-                        // İlk ürün detayını gönder
                         Product product = products.get(0);
                         sendProductDetails(chatId, product);
 
-                        // Renk seçeneklerini gönder
                         List<String> colors = products.stream().map(Product::getColor).distinct().collect(Collectors.toList());
                         sendColorOptions(chatId, userInput, colors);
                     } else {
@@ -85,30 +84,27 @@ public class TelegramBot extends TelegramLongPollingBot {
                 log.error(e.getMessage());
             }
         } else if (update.hasCallbackQuery()) {
-            String callbackData = update.getCallbackQuery().getData();
+            String callbackData = decodeInput(update.getCallbackQuery().getData()); // Gelen callback data'yı decode et
             Long chatId = update.getCallbackQuery().getMessage().getChatId();
 
             try {
                 if (callbackData.startsWith("continue_")) {
-                    // Kullanıcı aboneliğe devam etmek istiyor
                     String subscriptionId = callbackData.split("_")[1];
                     subscriptionService.processContinueSubscription(chatId, subscriptionId);
                 } else if (callbackData.startsWith("cancel_")) {
-                    // Kullanıcı aboneliği sonlandırmak istiyor
                     String subscriptionId = callbackData.split("_")[1];
                     subscriptionService.processCancelSubscription(chatId, subscriptionId);
                 } else if (callbackData.startsWith("color_")) {
                     String[] dataParts = callbackData.split("_");
-                    String productCode = dataParts[1];
-                    String color = dataParts[2];
+                    String productCode = decodeInput(dataParts[1]); // Decode edilen productCode
+                    String color = decodeInput(dataParts[2]); // Decode edilen color
                     sendSizeOptions(chatId, productCode, color);
                 } else if (callbackData.startsWith("size_")) {
                     String[] dataParts = callbackData.split("_");
-                    String productCode = dataParts[1];
-                    String color = dataParts[2];
-                    String size = dataParts[3];
-                    String availability = String.join("_",
-                            Arrays.copyOfRange(dataParts, 4, dataParts.length));
+                    String productCode = decodeInput(dataParts[1]); // Decode edilen productCode
+                    String color = decodeInput(dataParts[2]); // Decode edilen color
+                    String size = decodeInput(dataParts[3]); // Decode edilen size
+                    String availability = String.join("_", Arrays.copyOfRange(dataParts, 4, dataParts.length));
 
                     processSubscription(chatId, productCode, color, size, availability);
                     execute(new SendMessage(chatId.toString(), "Başka bir ürün takip isteğiniz varsa iletebilirsiniz!"));
@@ -168,11 +164,13 @@ public class TelegramBot extends TelegramLongPollingBot {
     }
 
     private void sendSizeOptions(Long chatId, String productCode, String color) throws TelegramApiException {
+        productCode = decodeInput(productCode); // Decode işlemi
+        color = decodeInput(color); // Decode işlemi
+
         SendMessage message = new SendMessage();
         message.setChatId(chatId.toString());
         message.setText("Lütfen bir beden seçin:");
 
-        // Ürün kodu ve renge göre tüm bedenleri al
         List<Size> sizes = productService.findSizesByProductCodeAndColor(productCode, color);
 
         if (sizes.isEmpty()) {
@@ -181,12 +179,13 @@ public class TelegramBot extends TelegramLongPollingBot {
         }
 
         InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
-
+        String finalProductCode = productCode;
+        String finalColor = color;
         List<List<InlineKeyboardButton>> rows = sizes.stream()
                 .map(size -> {
                     InlineKeyboardButton button = new InlineKeyboardButton();
                     button.setText(size.getName());
-                    button.setCallbackData("size_" + productCode + "_" + color + "_" + size.getName() + "_" + size.getAvailability().toString());
+                    button.setCallbackData("size_" + finalProductCode + "_" + finalColor + "_" + size.getName() + "_" + size.getAvailability().toString());
                     return List.of(button);
                 })
                 .toList();
