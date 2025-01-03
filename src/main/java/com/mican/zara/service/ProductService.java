@@ -164,7 +164,7 @@ public class ProductService {
     @Async
     public void fetchAndSaveProductsForCategory(Long categoryId) {
         try {
-            System.out.println("Fetching products for category: " + categoryId);
+            log.info("Fetching products for category: " + categoryId);
 
             String url = String.format("https://www.zara.com/tr/tr/category/%d/products?ajax=true", categoryId);
 
@@ -258,7 +258,7 @@ public class ProductService {
                                                         size.setAvailability(Availability.fromString(availabilityDto.getAvailability()));
                                                         sizes.add(size);
                                                     } catch (Exception e) {
-
+                                                        log.error("Error while mapping sizes for product: {} Message: {}", productCode, e.getMessage());
                                                     }
                                                 });
                                             }
@@ -277,8 +277,8 @@ public class ProductService {
                                         });
                                     }
                                 }
-                            } catch (Exception ignored) {
-
+                            } catch (Exception e) {
+                                log.error("Error while fetching products Message: {}", e.getMessage());
                             }
                         });
                     })

@@ -217,40 +217,64 @@ public class TelegramBot extends TelegramLongPollingBot {
         Product updatedProduct = productService.getAndUpdateProduct(new Subscription(p.getProductCode(), p.getColor(), selectedSize.getName(), selectedSize.getAvailability().toString()));
 
 
-        if (updatedProduct != null) {
-            if (selectedSize.getAvailability() != Availability.IN_STOCK &&
-                    selectedSize.getAvailability() != Availability.LOW_ON_STOCK) {
+        if (updatedProduct == null) {
+            log.error("Ürün güncellenemedi veya bulunamadı. SizeId: {}", sizeId);
+            try {
+                execute(new SendMessage(chatId.toString(), "Ürün bulunamadı veya güncellenemedi."));
+            } catch (TelegramApiException e) {
+                log.error("Hata mesajı gönderilirken hata oluştu: {}", e.getMessage());
+            }
+            return;
+        }
 
-                log.info("Ürün stokta değil, abonelik başlatılıyor.");
+        // 2) Güncellenmiş product içindeki size'ı bulalım
+        selectedSize = updatedProduct.getSizes().stream()
+                .filter(size -> size.getId().equals(sizeId))
+                .findFirst()
+                .orElse(null);
 
-                SubscribeRequest subscribeRequest = new SubscribeRequest();
-                subscribeRequest.setChatId(chatId.toString());
-                subscribeRequest.setProductCode(updatedProduct.getProductCode());
-                subscribeRequest.setColor(updatedProduct.getColor());
-                subscribeRequest.setSize(selectedSize.getName());
-                subscribeRequest.setAvailability(selectedSize.getAvailability().toString());
+        if (selectedSize == null) {
+            log.error("Seçtiğiniz beden, güncellenen üründe bulunamadı. SizeId: {}", sizeId);
+            try {
+                execute(new SendMessage(chatId.toString(), "Seçtiğiniz beden bulunamadı."));
+            } catch (TelegramApiException e) {
+                log.error("Hata mesajı gönderilirken hata oluştu: {}", e.getMessage());
+            }
+            return;
+        }
 
-                boolean isSubscribed = subscriptionService.subscribeProduct(subscribeRequest);
+        if (selectedSize.getAvailability() != Availability.IN_STOCK &&
+                selectedSize.getAvailability() != Availability.LOW_ON_STOCK) {
 
-                if (isSubscribed) {
-                    try {
-                        execute(new SendMessage(chatId.toString(), "Abonelik başarıyla oluşturuldu! Ürün kodu: " + updatedProduct.getProductCode() + ", Renk: " + updatedProduct.getColor() + ", Beden: " + selectedSize.getName()));
-                    } catch (TelegramApiException e) {
-                        log.error("Abonelik başarı mesajı gönderilirken hata oluştu: {}", e.getMessage());
-                    }
-                } else {
-                    try {
-                        execute(new SendMessage(chatId.toString(), "Bu ürüne zaten abonesiniz! Ürün kodu: " + updatedProduct.getProductCode() + ", Renk: " + updatedProduct.getColor() + ", Beden: " + selectedSize.getName()));
-                    } catch (TelegramApiException e) {
-                        log.error("Zaten abone mesajı gönderilirken hata oluştu: {}", e.getMessage());
-                    }
+            log.info("Ürün stokta değil, abonelik başlatılıyor.");
+
+            SubscribeRequest subscribeRequest = new SubscribeRequest();
+            subscribeRequest.setChatId(chatId.toString());
+            subscribeRequest.setProductCode(updatedProduct.getProductCode());
+            subscribeRequest.setColor(updatedProduct.getColor());
+            subscribeRequest.setSize(selectedSize.getName());
+            subscribeRequest.setAvailability(selectedSize.getAvailability().toString());
+
+            boolean isSubscribed = subscriptionService.subscribeProduct(subscribeRequest);
+
+            if (isSubscribed) {
+                try {
+                    execute(new SendMessage(chatId.toString(), "Abonelik başarıyla oluşturuldu! Ürün kodu: " + updatedProduct.getProductCode() + ", Renk: " + updatedProduct.getColor() + ", Beden: " + selectedSize.getName()));
+                } catch (TelegramApiException e) {
+                    log.error("Abonelik başarı mesajı gönderilirken hata oluştu: {}", e.getMessage());
                 }
             } else {
                 try {
-                    execute(new SendMessage(chatId.toString(), "Seçtiğiniz beden zaten stokta."));
+                    execute(new SendMessage(chatId.toString(), "Bu ürüne zaten abonesiniz! Ürün kodu: " + updatedProduct.getProductCode() + ", Renk: " + updatedProduct.getColor() + ", Beden: " + selectedSize.getName()));
                 } catch (TelegramApiException e) {
-                    log.error("Stok mesajı gönderilirken hata oluştu: {}", e.getMessage());
+                    log.error("Zaten abone mesajı gönderilirken hata oluştu: {}", e.getMessage());
                 }
+            }
+        } else {
+            try {
+                execute(new SendMessage(chatId.toString(), "Seçtiğiniz beden zaten stokta."));
+            } catch (TelegramApiException e) {
+                log.error("Stok mesajı gönderilirken hata oluştu: {}", e.getMessage());
             }
         }
     }
