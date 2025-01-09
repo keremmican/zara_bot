@@ -320,6 +320,10 @@ public class ProductService {
         return sizeRepository.findById(id).orElse(null);
     }
 
+    public List<Product> findAllBySeoDiscernProductId(String seoDiscernProductId) {
+        return productRepository.findAllBySeoDiscernProductId(seoDiscernProductId);
+    }
+
     public Product getAndUpdateProductBySizeId(Long sizeId) {
         Size size = findSizeById(sizeId);
         log.info("findSizeById sonucu: {}", size);

@@ -24,6 +24,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -77,15 +78,25 @@ public class TelegramBot extends TelegramLongPollingBot {
                     List<Product> products = productService.findAllByProductCode(userInput);
 
                     if (!products.isEmpty()) {
-                        Product product = products.get(0);
-                        sendProductDetails(chatId, product);
+                        // seoDiscernProductId'leri distinct olanları grupla
+                        Map<String, List<Product>> groupedBySeoDiscernProductId = products.stream()
+                                .collect(Collectors.groupingBy(Product::getSeoDiscernProductId));
 
-                        List<String> colors = products.stream().map(Product::getColor).distinct().collect(Collectors.toList());
-                        sendColorOptions(chatId, userInput, colors);
+                        if (groupedBySeoDiscernProductId.size() == 1) {
+                            // Tek ürün varsa doğrudan göster
+                            Product product = products.get(0);
+                            sendProductDetails(chatId, product);
+                            List<String> colors = products.stream().map(Product::getColor).distinct().collect(Collectors.toList());
+                            sendColorOptions(chatId, userInput, colors);
+                        } else {
+                            // Farklı ürünleri seçenek olarak sun
+                            sendProductOptions(chatId, groupedBySeoDiscernProductId);
+                        }
                     } else {
                         execute(new SendMessage(chatId.toString(), "Bu ürün koduyla eşleşen bir ürün bulunamadı."));
                     }
-                } else {
+                }
+                else {
                     execute(new SendMessage(chatId.toString(), "Geçersiz format! Ürün kodu şu şekilde olmalıdır: 1255/768"));
                 }
             } catch (TelegramApiException e) {
@@ -102,6 +113,15 @@ public class TelegramBot extends TelegramLongPollingBot {
                 } else if (callbackData.startsWith("cancel_")) {
                     String subscriptionId = callbackData.split("_")[1];
                     subscriptionService.processCancelSubscription(chatId, subscriptionId);
+                } else if (callbackData.startsWith("product_")) {
+                    String seoDiscernProductId = callbackData.split("_")[1];
+                    List<Product> selectedProducts = productService.findAllBySeoDiscernProductId(seoDiscernProductId);
+
+                    if (!selectedProducts.isEmpty()) {
+                        Product selectedProduct = selectedProducts.get(0);
+                        sendProductDetails(chatId, selectedProduct);
+                        sendColorOptions(chatId, selectedProduct.getProductCode(), List.of(selectedProduct.getColor()));
+                    }
                 } else if (callbackData.startsWith("color_")) {
                     String[] dataParts = callbackData.split("_");
                     String productCode = decodeInput(dataParts[1]); // Decode edilen productCode
@@ -118,6 +138,27 @@ public class TelegramBot extends TelegramLongPollingBot {
                 log.error(e.getMessage());
             }
         }
+    }
+
+    private void sendProductOptions(Long chatId, Map<String, List<Product>> groupedProducts) throws TelegramApiException {
+        SendMessage message = new SendMessage();
+        message.setChatId(chatId.toString());
+        message.setText("Aynı ürün koduna sahip farklı ürünler mevcut. Lütfen birini seçin:");
+
+        InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = groupedProducts.entrySet().stream()
+                .map(entry -> {
+                    InlineKeyboardButton button = new InlineKeyboardButton();
+                    Product productExample = entry.getValue().get(0);
+                    button.setText(productExample.getName() + " - " + productExample.getColor());
+                    button.setCallbackData("product_" + entry.getKey()); // seoDiscernProductId'yi callback data olarak gönderiyoruz
+                    return List.of(button);
+                })
+                .collect(Collectors.toList());
+
+        markup.setKeyboard(rows);
+        message.setReplyMarkup(markup);
+        execute(message);
     }
 
     private void sendProductDetails(Long chatId, Product product) throws TelegramApiException {

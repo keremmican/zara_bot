@@ -27,4 +27,5 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     @Query("SELECT p FROM Product p JOIN FETCH p.sizes s WHERE s = :size")
     Product findBySizesContaining(@Param("size") Size size);
 
+    List<Product> findAllBySeoDiscernProductId(String seoDiscernProductId);
 }
