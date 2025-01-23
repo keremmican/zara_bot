@@ -23,15 +23,13 @@ pipeline {
         stage('Docker Run') {
             steps {
                 sh '''
-                # Eğer aynı isimde bir container çalışıyorsa, durdur ve sil
                 if [ $(docker ps -aq -f name=zara-bot-container) ]; then
                     echo "Stopping and removing existing container"
                     docker stop zara-bot-container
                     docker rm zara-bot-container
                 fi
 
-                # Yeni container'ı başlat
-                docker run -d --name zara-bot-container -p 8088:8088 $DOCKER_IMAGE
+                docker run --network="host" -d --name zara-bot-container -p 8088:8088 $DOCKER_IMAGE
                 '''
             }
         }
